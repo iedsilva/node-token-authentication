@@ -6,6 +6,8 @@ var app         = express();
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
 var mongoose    = require('mongoose');
+var bcrypt      = require('bcrypt-nodejs');
+var path = require('path');
 
 var jwt    = require('jsonwebtoken'); // used to create, sign, and verify tokens
 var config = require('./config'); // get our config file
@@ -28,12 +30,15 @@ app.use(morgan('dev'));
 // =================================================================
 // routes ==========================================================
 // =================================================================
-app.get('/setup', function(req, res) {
+app.post('/setup', function(req, res) {
 
+	//hash password
+	console.log('setup', req.body);
+	var hash = bcrypt.hashSync(req.body.password);
 	// create a sample user
 	var nick = new User({ 
-		name: 'Nick Cerminara', 
-		password: 'password',
+		name: req.body.name, 
+		password: hash,
 		admin: true 
 	});
 	nick.save(function(err) {
@@ -72,23 +77,24 @@ apiRoutes.post('/authenticate', function(req, res) {
 		} else if (user) {
 
 			// check if password matches
-			if (user.password != req.body.password) {
-				res.json({ success: false, message: 'Authentication failed. Wrong password.' });
-			} else {
+			console.log('authenticate', user.password, req.body.password)
+			var checkPass = bcrypt.compare(req.body.password, user.password, function(err, ires) {
+				if (!ires) {
+					res.json({ success: false, message: 'Authentication failed. Wrong password.' });
+				} else {
+					// if user is found and password is right
+					// create a token
+					var token = jwt.sign(user, app.get('superSecret'), {
+						expiresIn: 86400 // expires in 24 hours
+					});
 
-				// if user is found and password is right
-				// create a token
-				var token = jwt.sign(user, app.get('superSecret'), {
-					expiresIn: 86400 // expires in 24 hours
-				});
-
-				res.json({
-					success: true,
-					message: 'Enjoy your token!',
-					token: token
-				});
-			}		
-
+					res.json({
+						success: true,
+						message: 'Enjoy your token!',
+						token: token
+					});
+				}		
+			});
 		}
 
 	});
@@ -137,8 +143,11 @@ apiRoutes.get('/', function(req, res) {
 });
 
 apiRoutes.get('/users', function(req, res) {
-	User.find({}, function(err, users) {
-		res.json(users);
+	User.find({
+		name: 'Ed Silva'
+	}, function(err, users) {
+		res.sendFile(path.join(__dirname, './public', 'users.html'));
+		// res.json(users);
 	});
 });
 
